@@ -1,0 +1,30 @@
+{
+  "name": "framework",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/cjs/Index.js",
+  "module": "dist/esm/Index.js",
+  "exports": {
+    ".": {
+      "require": "./dist/cjs/Index.js",
+      "import": "./dist/esm/Index.js"
+    }
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "nodemon"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "nodemon": "^3.1.10",
+    "rollup": "^4.41.1"
+  },
+  "dependencies": {
+    "path-to-regexp": "^8.2.0"
+  }
+}
