@@ -1,6 +1,6 @@
 {
-  "name": "framework",
-  "version": "1.0.0",
+  "name": "mvcraft",
+  "version": "0.0.1",
   "description": "",
   "main": "dist/cjs/Index.js",
   "module": "dist/esm/Index.js",
@@ -14,9 +14,10 @@
     "build": "rollup -c",
     "dev": "nodemon"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["api", "back-end", "router", "mvc", "nodejs"],
+  "files": ["dist/"],
+  "author": "Damian Droździel <damiandro14@gmail.com>",
+  "license": "MIT",
   "type": "module",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.3",
@@ -26,5 +27,13 @@
   },
   "dependencies": {
     "path-to-regexp": "^8.2.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/damiandro40/MVCraft.git"
+  },
+  "bugs": {
+    "url": "https://github.com/damiandro40/MVCraft.git/issues"
+  }, 
+  "homepage": "https://github.com/damiandro40/MVCraft.git#readme"
 }
