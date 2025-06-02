@@ -821,30 +821,5 @@ const Controller = (path, method, handler) => {
 
 };
 
-const app = App();
-
-const CleverGreetingController = Controller('/greet/:endpoint', '*', async (methods, data) => {
-    const { Endpoint, SetHeader, End } = methods;
-
-    SetHeader('Content-Type', 'application/json');
-
-    Endpoint('hello', '*', ({ Response }) => Response(200, 'GreetingView', 'Cześć!'));
-    Endpoint('hi', '*', ({ Response }) => Response(200, 'GreetingView', 'Hej!'));
-    Endpoint('*', '*', ({ Response}) => Response(200, 'TAKIEGO PRZYWITANIA NIE MA'));
-    End();
-});
-
-const GreetingView = View('GreetingView', (data) => {
-    return {
-        success: true,
-        message: data || 'No message'
-    }
-});
-
-app.AddController(CleverGreetingController);
-app.AddView(GreetingView);
-
-app.Run((port) => console.log('Launched at port ' + port));
-
 export { App, Controller, View };
 //# sourceMappingURL=Index.js.map
