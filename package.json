@@ -1,12 +1,10 @@
 {
   "name": "mvcraft",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "",
-  "main": "dist/cjs/Index.js",
   "module": "dist/esm/Index.js",
   "exports": {
     ".": {
-      "require": "./dist/cjs/Index.js",
       "import": "./dist/esm/Index.js"
     }
   },

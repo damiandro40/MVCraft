@@ -422,28 +422,24 @@ const createContext = () => {
 
     return {
         addController: (path, method, handler) => {
-            controllers.push({ path, method, handler });
+            const matcher = distExports.match(path, { decode: decodeURIComponent });
+            controllers.push({ path, method, handler, matcher });
         },
 
         getController: (path, method) => {
-            if(path.includes(':')) {
-                for(const controller of controllers) {
-                    const matcher = distExports.match(controller.path, { decode: decodeURIComponent });
-                    const matched = matcher(path);
-                    if(!matched) continue
-                    if(controller.method !== method) continue
+            for(const controller of controllers) {
+                const matched = controller.matcher(path);
+                if(!matched) continue
+                if(controller.method !== method) continue
 
-                    return {
-                        path: controller.path,
-                        method: controller.method,
-                        handler: controller.handler,
-                        params: matched.params
-                    }
+                return {
+                    path: controller.path,
+                    method: controller.method,
+                    handler: controller.handler,
+                    params: matched.params || null
                 }
-                return null
             }
-
-            return controllers.find(c => c.path === path && c.method === method) || null
+            return null
         },
 
         addView: (name, handler) => {
@@ -457,16 +453,69 @@ const createContext = () => {
 
 };
 
-const parseCookies = (cookies) => {
-    if(!cookies) return {}
+const createResponse = (_ctx, req, res) => {
 
-    const arr = cookies.split(';');
+    return async (statusCode, payload, viewData) => {
+        res.statusCode = statusCode;
+                
+        if(typeof payload === 'string') {
+            const view = _ctx.getView(payload);
+            if(view) payload = await view.handler(viewData);
+        }
+
+        if(res.getHeader('content-type') === 'application/json') {
+            res.end(JSON.stringify(payload));
+        } else {
+            res.end(payload);
+        }
+    }
+
+};
+
+const createNext = (_ctx, req, res, config, url, data, createMethods) => {
+
+    return async (path) => {
+        const ctrl = _ctx.getController(path, data.method) || _ctx.getController(path, '*');
+        if(!ctrl) {
+            res.statusCode = 404;
+            return res.end('Path not found')
+        }
+        if(ctrl.method !== data.method && ctrl.method !== '*') {
+            res.statusCode = 404;
+            return res.end('Path not found')
+        }
+
+        const methods = await createMethods(_ctx, req, res, url, config, data);
+
+        methods.data.path = path;
+        methods.data.params = ctrl.params || null;
+
+        await ctrl.handler(methods.handlers, methods.data);
+    }
+
+};
+
+const createSetHeader = (req, res, data) => {
+
+    return (name, value) => {
+        data.headers.sent[name] = value;
+        res.setHeader(name, value);
+    }
+
+};
+
+const parseCookies = (cookies = '') => {
+    if (!cookies) return {}
+
     const output = {};
 
-    arr.forEach(c => {
-        const name = c.split('=')[0];
-        const value = c.split('=')[1];
-        output[name] = decodeURIComponent(value);
+    cookies.split(';').forEach(cookie => {
+        const [name, ...rest] = cookie.split('=');
+        const trimmedName = name?.trim();
+        const value = rest.join('=').trim();
+        if (trimmedName) {
+            output[trimmedName] = decodeURIComponent(value);
+        }
     });
 
     return output
@@ -487,6 +536,79 @@ const setCookie = (name, value, options = {}) => {
     if(sameSite) cookieString +=`; SameSite=${sameSite}`; 
 
     return cookieString
+
+};
+
+const createHandleCookies = (req, res, data) => {
+
+    const SetCookie = (name, value, options) => {
+        const newCookie = setCookie(name, value, options);
+        const existingCookies = res.getHeader('Set-Cookie');
+        if(!existingCookies) {
+            res.setHeader('Set-Cookie', newCookie);
+        } else {
+            if(Array.isArray(existingCookies)) {
+                res.setHeader('Set-Cookie', [...existingCookies, newCookie]);
+            } else {
+                res.setHeader('Set-Cookie', [existingCookies, newCookie]);
+            }
+        }
+        data.headers.sent['Set-Cookie'] = res.getHeader('Set-Cookie');
+        data.cookies = parseCookies(req.headers.cookie);
+    };
+
+    const DelCookie = (name) => {
+        const cookies = data.cookies;
+        if(!cookies[name]) return
+
+        SetCookie(name, cookies[name].value, { expires: new Date(Date.now() - 5) });
+        delete data.cookies[name];
+    };
+
+    return { SetCookie, DelCookie }
+
+};
+
+const createEnd = (_ctx, req, res, config, url, data, createMethods) => {
+
+    return async (statusCode = 204) => {
+        if(req._endpoints && req._endpoints.length > 0) {
+            let endpt = req._endpoints.find(e => e.param === e.path && (e.method === data.method || e.method === '*') );
+            if(!endpt) endpt = req._endpoints.find(e => e.path === '*' && (e.method === data.method || e.method === '*'));
+            if(!endpt) {
+                res.statusCode = 404;
+                return res.end('Path not found')
+            }
+
+            const methods = await createMethods(_ctx, req, res, config, url, data);
+            await endpt.handler(methods.handlers, methods.data);
+
+        } else {
+            res.setHeader('Connection', 'close');
+            res.statusCode = statusCode;
+            res.end();
+        }
+    }
+
+};
+
+const createEndpoint = (_ctx, req, res, config, url, data, createMethods) => {
+
+    return (path, method = data.method, handler) => {
+        req._endpoints.push({ param: data.params?.endpoint, path, method, handler });
+    }
+
+};
+
+const parseQuery = (urlObj) => {
+
+    const output = {};
+
+    for(const [key, value] of urlObj.searchParams) {
+        output[key] = value;
+    }
+
+    return output
 
 };
 
@@ -511,15 +633,61 @@ const parseBody = (req, maxSize = 0) => {
 
 };
 
+const createData = async (req, res, config, url) => {
+
+    const data = {};
+
+    data.path = url.pathname;
+    data.params = req._params;
+    data.method = req.method;
+    data.headers = {
+        sent: res.getHeaders(),
+        received: req.headers
+    },
+    data.query = parseQuery(url);
+    data.cookies = parseCookies(req.headers.cookie);
+
+    if(req.method === 'POST' || req.method === 'PUT') {
+        data.body = await parseBody(req, config.maxBodySize);
+
+        if(req.headers['content-type'] === 'application/json') data.body = JSON.parse(data.body);
+    }
+
+    return data
+
+};
+
+const createMethods = async (_ctx, req, res, config, url, data) => {
+
+    const handlers = {};
+
+    if(!data) data = await createData(req, res, config, url);
+
+    const cookieHandlers = createHandleCookies(req, res, data);
+
+    handlers.Response = createResponse(_ctx, req, res);
+    handlers.Next = createNext(_ctx, req, res, config, url, data, createMethods);
+    handlers.SetHeader = createSetHeader(req, res, data);
+    handlers.SetCookie = cookieHandlers.SetCookie;
+    handlers.DelCookie = cookieHandlers.DelCookie;
+    handlers.End = createEnd(_ctx, req, res, config, url, data, createMethods);
+    handlers.Endpoint = createEndpoint(_ctx, req, res, config, url, data);
+
+    return { handlers, data }
+
+};
+
 const defaultConfig = {
     port: 3000,
-    maxBodySize: 0
+    maxBodySize: 0,
+    connectionTimeout: 10000
 };
 
 /**
  * @typedef {object} Config
- * @property {number} port
- * @property {number} maxBodySize
+ * @property {number} port - Port at which your application will be running (by default it is 3000)
+ * @property {number} connectionTimeout - Time in ms after which connection is closed (by default it is 10s)
+ * @property {number} maxBodySize - Max body size in bytes accepted in any http request (by default it is 0 - which means there is no limit!)
  */
 
 /**
@@ -537,14 +705,30 @@ const defaultConfig = {
 
 const App = (config = defaultConfig) => {
 
+    config = { ...defaultConfig, ...config };
+
     const _ctx = createContext();
 
     const server = createServer(async (req, res) => {
-        const _url = new URL(req.url, `http://${req.headers.host}`);
+        const connTimeout = setTimeout(() => {
+            res.statusCode = 504;
+            res.end('Request timed out');
+        }, config.connectionTimeout);
 
-        const { pathname } = _url;
+        res.on('close', () => {
+            if(connTimeout) clearTimeout(connTimeout);
+        });
 
-        const { method, query } = req;
+        res.on('finish', () => {
+            if(connTimeout) clearTimeout(connTimeout);
+        });
+
+        const url = new URL(req.url, `http://${req.headers.host}`);
+
+        const { pathname } = url;
+        const { method } = req;
+
+        req._endpoints = [];
 
         let ctrl = _ctx.getController(pathname, method);
         if(!ctrl) ctrl = _ctx.getController(pathname, '*');
@@ -553,74 +737,14 @@ const App = (config = defaultConfig) => {
 
         if(!ctrl) {
             res.statusCode = 404;
-            res.end('Path not found');
-        } else {
-
-            const data = {
-                path: pathname,
-                method,
-                headers: { sent: res.getHeaders(), received: req.headers },
-                cookies: parseCookies(req.headers.cookie),
-                query: query || null,
-                params: ctrl.params || null,
-                body: null
-            };
-
-            if(req.method === 'POST' || req.method === 'PUT') {
-                data.body = await parseBody(req, config.maxBodySize);
-                if(req.headers['content-type'] === 'application/json') {
-                    data.body = JSON.parse(data.body);
-                }
-            }
-
-            const methods = {
-                Response: async (statusCode, payload, viewData) => {
-                    res.statusCode = statusCode;
-                    
-                    if(typeof payload === 'string') {
-                        const view = _ctx.getView(payload);
-                        if(view) payload = await view.handler(viewData);
-                    }
-
-                    if(res.getHeader('content-type') === 'application/json') {
-                        res.end(JSON.stringify(payload));
-                    } else {
-                        res.end(payload);
-                    }
-                },
-
-                SetHeader: (name, value) => {
-                    data.headers.sent[name] = value;
-                    res.setHeader(name, value);
-                },
-
-                SetCookie: (name, value, options) => {
-                    const newCookie = setCookie(name, value, options);
-                    const existingCookies = res.getHeader('Set-Cookie');
-                    if(!existingCookies) {
-                        res.setHeader('Set-Cookie', newCookie);
-                    } else {
-                        if(Array.isArray(existingCookies)) {
-                            res.setHeader('Set-Cookie', [...existingCookies, newCookie]);
-                        } else {
-                            res.setHeader('Set-Cookie', [existingCookies, newCookie]);
-                        }
-                    }
-                    data.headers.sent['Set-Cookie'] = res.getHeader('Set-Cookie');
-                },
-
-                DelCookie: (name) => {
-                    const cookies = parseCookies(req.headers.cookie);
-                    if(!cookies[name]) return
-
-                    methods.SetCookie(name, cookies[name].value, { expires: new Date(Date.now() - 5) });
-                    delete data.cookies[name];
-                }
-            };
-
-            await ctrl.handler(methods, data);
+            return res.end('Path not found')
         }
 
+        req._params = ctrl.params || null;
+
+        const _methods = await createMethods(_ctx, req, res, config, url);
+
+        await ctrl.handler(_methods.handlers, _methods.data);
     });
 
     return {
@@ -655,11 +779,7 @@ const View = (name, handler) => {
 };
 
 /**
- * @typedef {object} Methods
- * @property {(statusCode: number, payload: string, viewData?: any) => void} Response
- * @property {(name: string, value: string) => void} SetHeader
- * @property {(name: string, value: string, options?: object) => void} SetCookie
- * @property {(name: string) => void} DelCookie
+ * @typedef {'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | '*'} HttpMethod
  */
 
 /**
@@ -674,9 +794,20 @@ const View = (name, handler) => {
  */
 
 /**
+ * @typedef {object} Methods
+ * @property {(statusCode: number, payload: string, viewData?: any) => void} Response
+ * @property {(path: string) => void} Next
+ * @property {(name: string, value: string) => void} SetHeader
+ * @property {(name: string, value: string, options?: object) => void} SetCookie
+ * @property {(name: string) => void} DelCookie
+ * @property {(statusCode?: number) => void} End
+ * @property {(path: string, handler: (methods: Methods, data: Data) => void)} Endpoint
+ */
+
+/**
  * @param {string} path
- * @param {'GET'|'POST'|'PUT'|'PATCH'|'DELETE'|'*'} method
- * @param {(methods: Methods, data?: Data) => void} handler
+ * @param {HttpMethod} method
+ * @param {(methods: Methods, data: Data) => void} handler
  * @returns {object}
  */
 
@@ -689,6 +820,31 @@ const Controller = (path, method, handler) => {
     }
 
 };
+
+const app = App();
+
+const CleverGreetingController = Controller('/greet/:endpoint', '*', async (methods, data) => {
+    const { Endpoint, SetHeader, End } = methods;
+
+    SetHeader('Content-Type', 'application/json');
+
+    Endpoint('hello', '*', ({ Response }) => Response(200, 'GreetingView', 'Cześć!'));
+    Endpoint('hi', '*', ({ Response }) => Response(200, 'GreetingView', 'Hej!'));
+    Endpoint('*', '*', ({ Response}) => Response(200, 'TAKIEGO PRZYWITANIA NIE MA'));
+    End();
+});
+
+const GreetingView = View('GreetingView', (data) => {
+    return {
+        success: true,
+        message: data || 'No message'
+    }
+});
+
+app.AddController(CleverGreetingController);
+app.AddView(GreetingView);
+
+app.Run((port) => console.log('Launched at port ' + port));
 
 export { App, Controller, View };
 //# sourceMappingURL=Index.js.map
