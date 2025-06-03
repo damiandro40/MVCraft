@@ -12,8 +12,16 @@
     "build": "rollup -c",
     "dev": "nodemon"
   },
-  "keywords": ["api", "back-end", "router", "mvc", "nodejs"],
-  "files": ["dist/"],
+  "keywords": [
+    "api",
+    "back-end",
+    "router",
+    "mvc",
+    "nodejs"
+  ],
+  "files": [
+    "dist/"
+  ],
   "author": "Damian Droździel <damiandro14@gmail.com>",
   "license": "MIT",
   "type": "module",
@@ -24,6 +32,7 @@
     "rollup": "^4.41.1"
   },
   "dependencies": {
+    "chalk": "^5.4.1",
     "path-to-regexp": "^8.2.0"
   },
   "repository": {
@@ -32,6 +41,6 @@
   },
   "bugs": {
     "url": "https://github.com/damiandro40/MVCraft.git/issues"
-  }, 
+  },
   "homepage": "https://github.com/damiandro40/MVCraft.git#readme"
 }
