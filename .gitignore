@@ -3,3 +3,4 @@ src/
 nodemon.json
 rollup.config.js
 *.tgz
+test/
