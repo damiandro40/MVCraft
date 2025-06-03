@@ -1,5 +1,7 @@
 import { createServer } from 'http';
-import { URL } from 'url';
+import { fileURLToPath, pathToFileURL, URL } from 'url';
+import path from 'path';
+import fs from 'fs';
 
 var dist = {};
 
@@ -1267,6 +1269,30 @@ const parseBody = (req, maxSize = 0) => {
 
 };
 
+const importComponents = async (base, target) => {
+    try {
+        const _path = path.join(path.dirname(fileURLToPath(base)), target);
+    
+        const components = fs.readdirSync(_path);
+
+        const output = [];
+
+        for(let c of components) {
+            if(!c.endsWith('.js')) continue
+
+            const _cpath = path.join(_path, c);
+            const _cFilePath = pathToFileURL(_cpath).href;
+            
+            const component = await import(_cFilePath);
+            output.push(component.default);
+        }
+
+        return output
+    } catch(err) {
+        return []
+    }
+};
+
 const defaultConfig = {
     port: 3000,
     maxBodySize: 0,
@@ -1276,8 +1302,10 @@ const defaultConfig = {
 /**
  * @typedef {object} Config
  * @property {number} port - Port at which your application will be running (by default it is 3000).
- * @property {Array} controllers - Array which contains your controllers. They will be loaded automatically.
- * @property {Array} views - Array which contains your views they will be loaded automatically.
+ * @property {string} baseURL - import.meta.url - required in order to load controllers, views or services.
+ * @property {string} controllers - Path to your controllers. They will be loaded automatically.
+ * @property {string} views - Path to your views. They will be loaded automatically.
+ * @property {string} services - Path to your services. They will be loaded automatically.
  * @property {number} connectionTimeout - Time in ms after which connection is closed (by default it is 10s).
  * @property {number} maxBodySize - Max body size in bytes accepted in any http request (by default it is 0 - which means there is no limit!).
  */
@@ -1361,7 +1389,28 @@ const App = (config = defaultConfig) => {
             if(typeof service !== 'object' || !service || Array.isArray(service)) return logger('Service must be an object')
             _ctx.addService(service.name, service.handler);
         },
-        Run: (callback) => {
+        Run: async (callback) => {
+            if((config.controllers || config.views || config.services) && !config.baseURL) {
+                return logger('You need to provide baseURL in config in order to import controllers, views or services')
+            }
+
+            const components = ['controllers', 'views', 'services'];
+
+            for(let c of components) {
+
+                if(!config.baseURL) break
+                if(!config[c]) continue
+
+                const cmps = await importComponents(config.baseURL, config[c]);
+                for(let cmp of cmps) {
+                    if(typeof cmp !== 'object' || !cmp || Array.isArray(cmp)) continue
+
+                    if(c === 'controllers') _ctx.addController(cmp.path, cmp.method, cmp.handler, cmp.config);
+                    if(c === 'views') _ctx.addView(cmp.name, cmp.handler);
+                    if(c === 'services') _ctx.addService(cmp.name, cmp.handler);
+                }
+            }
+
             server.listen(config.port, () => {
                 if(typeof callback === 'function') callback(config.port);
             });
