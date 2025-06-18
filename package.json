@@ -1,0 +1,32 @@
+{
+  "name": "mvcraft",
+  "version": "0.2.0",
+  "description": "",
+  "main": "./dist/cjs/Index.js",
+  "module": "./dist/esm/Index.js",
+  "exports": {
+    "import": "./dist/esm/Index.js",
+    "require": "./dist/cjs/Index.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "nodemon src/Index.js"
+  },
+  "keywords": [],
+  "author": "Damian Droździel <damiandro14@gmail.com>",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.5",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "nodemon": "^3.1.10",
+    "rollup": "^4.43.0"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "kleur": "^4.1.5"
+  }
+}

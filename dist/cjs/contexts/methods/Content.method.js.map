@@ -1,0 +1,1 @@
+{"version":3,"file":"Content.method.js","sources":["../../../../src/contexts/methods/Content.method.js"],"sourcesContent":["const createContent = (req, res, locals) => {\r\n    return () => (locals.content)\r\n}\r\n\r\nexport default createContent"],"names":[],"mappings":";;AAAK,MAAC,aAAa,GAAG,CAAC,GAAG,EAAE,GAAG,EAAE,MAAM,KAAK;AAC5C,IAAI,OAAO,OAAO,MAAM,CAAC,OAAO,CAAC;AACjC;;;;"}

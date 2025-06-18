@@ -1,0 +1,1 @@
+{"version":3,"file":"App.config.js","sources":["../../../src/configs/App.config.js"],"sourcesContent":["export default {\r\n    port: 3000,\r\n    infiniteLoopGuardTreshold: 10\r\n}"],"names":[],"mappings":"AAAA,gBAAe;AACf,IAAI,IAAI,EAAE,IAAI;AACd,IAAI,yBAAyB,EAAE,EAAE;AACjC;;;;"}
